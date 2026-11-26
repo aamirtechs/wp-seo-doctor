@@ -1,0 +1,4 @@
+url,title,meta_description,h1,h1_count,word_count,status,canonical,focus_keyword,content_type,last_modified
+/about/,About Us,"Learn who we are and how Example Store started, with our story and our team.",About Our Company,1,180,index,,about us,page,2024-01-10
+/contact/,Contact,Get in touch with the Example Store team today.,Contact Us,1,60,index,https://example.com/contact/,contact,page,2025-06-01
+/services/widget-repair/,Widget Repair Service by Example Store,"Our repair team fixes broken widgets quickly, with genuine parts and a full warranty.",Widget Repair,1,400,index,https://example.com/services/widget-repair/,widget installation,page,2026-11-10

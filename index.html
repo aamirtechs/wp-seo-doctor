@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WP SEO Doctor - AamirTechs</title>
+<style>
+:root{--navy:#0b1f3a;--gold:#d4a72c;--bg:#f6f8fb;--ink:#1c2733;--muted:#5b6b7c;--line:#d9e1ea}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--navy);color:#fff;padding:28px 20px;border-bottom:4px solid var(--gold)}
+header .wrap{max-width:880px;margin:0 auto}
+header h1{margin:0 0 6px;font-size:1.6rem}
+header p{margin:0;color:#c8d4e4}
+main{max-width:880px;margin:24px auto;padding:0 20px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(11,31,58,.08)}
+label{display:block;font-weight:600;margin:14px 0 6px}
+.card>label:first-child{margin-top:0}
+textarea{width:100%;min-height:180px;padding:10px;border:1px solid var(--line);border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85rem}
+input[type=text],input[type=number],select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:.95rem;width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:4px}
+.grid label{margin:0 0 6px}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:.95rem;cursor:pointer}
+button.alt{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+button.gold{background:var(--gold);color:#0b1f3a;font-weight:600}
+pre{background:#0b1f3a;color:#eef3f9;border-radius:8px;padding:16px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;min-height:60px;font-size:.85rem}
+footer{max-width:880px;margin:0 auto 32px;padding:0 20px;color:var(--muted);font-size:.9rem}
+footer a{color:var(--navy)}
+.hint{color:var(--muted);font-size:.85rem;margin-top:6px;font-weight:400}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>WP SEO Doctor</h1><p>Audit a WordPress pages and posts CSV export for on-page SEO mistakes: missing or duplicate titles and meta descriptions, missing or repeated H1s, thin content, stale pages, long URLs, and focus keywords that never appear in the title.</p></div></header>
+<main><div class="card">
+<label for="file">Input CSV file</label>
+<input type="file" id="file" accept=".csv,text/csv">
+<label for="input">Or paste the CSV export</label>
+<textarea id="input" spellcheck="false" placeholder="Paste CSV with a header row (url, title, meta_description, h1, h1_count, word_count, status, canonical, focus_keyword, content_type, last_modified), or load the sample."></textarea>
+<label>Audit options</label>
+<div class="grid">
+<div><label for="opt-max-title">Max title length</label><input type="number" id="opt-max-title" step="1" value="60"></div>
+<div><label for="opt-min-title">Min title length</label><input type="number" id="opt-min-title" step="1" value="30"></div>
+<div><label for="opt-max-desc">Max description length</label><input type="number" id="opt-max-desc" step="1" value="160"></div>
+<div><label for="opt-min-desc">Min description length</label><input type="number" id="opt-min-desc" step="1" value="50"></div>
+<div><label for="opt-min-words">Min word count</label><input type="number" id="opt-min-words" step="1" value="150"></div>
+<div><label for="opt-max-url">Max URL length</label><input type="number" id="opt-max-url" step="1" value="115"></div>
+<div><label for="opt-stale">Stale after (days)</label><input type="number" id="opt-stale" step="1" value="365"></div>
+<div><label for="opt-asof">As of date</label><input type="text" id="opt-asof" value="2026-11-15"></div>
+</div>
+<p class="hint">Screaming Frog, Yoast, and Rank Math header names work too, and extra columns are ignored. The as of date drives the stale and future date checks.</p>
+<div class="row"><button class="gold" id="run" type="button">Run check</button><button class="alt" id="sample" type="button">Load sample</button><button class="alt" id="download" type="button">Download report</button></div>
+<label for="out">Report</label>
+<pre id="out">Your report will appear here.</pre>
+</div></main>
+<footer>
+<p>Built by AamirTechs. <a href="https://aamirtechs.github.io/">All tools</a> | <a href="https://github.com/aamirtechs/wp-seo-doctor">Source</a></p>
+<p>Privacy: this tool runs 100% in your browser, nothing is uploaded.</p>
+</footer>
+<script id="core">
+// Pure logic port of wp_seo_doctor.py. No DOM access in this block.
+var HEADER_ALIASES = {
+  "url": "url", "address": "url",
+  "title": "title", "title1": "title", "seotitle": "title",
+  "metadescription": "meta_description", "metadescription1": "meta_description", "description": "meta_description",
+  "h1": "h1", "h11": "h1", "h1count": "h1_count", "h1s": "h1_count",
+  "wordcount": "word_count", "words": "word_count", "wordcounttotal": "word_count",
+  "status": "status", "robots": "status", "indexstatus": "status", "indexability": "status",
+  "canonical": "canonical", "canonicallink": "canonical",
+  "focuskeyword": "focus_keyword", "keyword": "focus_keyword", "focuskeyphrase": "focus_keyword",
+  "contenttype": "content_type", "type": "content_type", "posttype": "content_type",
+  "lastmodified": "last_modified", "modified": "last_modified", "date": "last_modified", "datemodified": "last_modified"
+};
+var VALID_STATUSES = ["index", "noindex"];
+function normaliseHeader(name) {
+  return String(name).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+function normaliseUrl(url) {
+  var text = String(url).trim().toLowerCase();
+  if (text.length > 1 && text.endsWith("/")) text = text.replace(/\/+$/, "");
+  return text;
+}
+function pyRepr(v) {
+  if (v === null || v === undefined) return "None";
+  if (v === true) return "True";
+  if (v === false) return "False";
+  if (typeof v === "number") return String(v);
+  var s = String(v);
+  var q = (s.indexOf("'") >= 0 && s.indexOf('"') < 0) ? '"' : "'";
+  var out = q;
+  for (var i = 0; i < s.length; i++) {
+    var ch = s[i];
+    if (ch === "\\") out += "\\\\";
+    else if (ch === q) out += "\\" + q;
+    else if (ch === "\n") out += "\\n";
+    else if (ch === "\r") out += "\\r";
+    else if (ch === "\t") out += "\\t";
+    else out += ch;
+  }
+  return out + q;
+}
+function parseCsvRows(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  var rows = [], row = [], field = "", inQ = false, started = false, i = 0;
+  function endField() { row.push(field); field = ""; }
+  function endRow() {
+    var blank = row.length === 0 && field === "" && !started;
+    endField();
+    rows.push(blank ? null : row);
+    row = []; started = false;
+  }
+  while (i < text.length) {
+    var c = text[i];
+    if (inQ) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; }
+        else { inQ = false; i++; }
+      } else { field += c; i++; }
+    } else if (c === '"' && field === "") { inQ = true; started = true; i++; }
+    else if (c === ",") { endField(); started = true; i++; }
+    else if (c === "\r") { if (text[i + 1] === "\n") i++; endRow(); i++; }
+    else if (c === "\n") { endRow(); i++; }
+    else { field += c; started = true; i++; }
+  }
+  if (inQ || field !== "" || row.length > 0 || started) endRow();
+  return rows;
+}
+function readCsv(text) {
+  var raw = parseCsvRows(text);
+  if (raw.length === 0) return { rows: [], hasUrl: false, hasKeyword: false };
+  var fieldnames = raw[0] || [];
+  var mapped = fieldnames.map(function (n) {
+    var k = normaliseHeader(n);
+    return HEADER_ALIASES[k] || k;
+  });
+  var rows = [];
+  for (var r = 1; r < raw.length; r++) {
+    if (raw[r] === null) continue;
+    var rec = raw[r], obj = {};
+    for (var c = 0; c < fieldnames.length; c++) {
+      if (fieldnames[c] === null || fieldnames[c] === undefined) continue;
+      obj[mapped[c]] = c < rec.length ? rec[c] : "";
+    }
+    rows.push(obj);
+  }
+  return { rows: rows, hasUrl: mapped.indexOf("url") >= 0, hasKeyword: mapped.indexOf("focus_keyword") >= 0 };
+}
+function parseIntWp(value, field) {
+  if (value === null || value === undefined) return null;
+  var text = String(value).trim().replace(/,/g, "");
+  if (text === "") return null;
+  if (!/^[+-]?\d+(_\d+)*$/.test(text)) throw new Error(field + " is not a whole number: " + pyRepr(value));
+  return parseInt(text.replace(/_/g, ""), 10);
+}
+function pad2(n) { return (n < 10 ? "0" : "") + n; }
+function parseDateWp(value, field) {
+  if (value === null || value === undefined) return null;
+  var text = String(value).trim();
+  if (text === "") return null;
+  var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+  if (m) {
+    var y = +m[1], mo = +m[2], d = +m[3];
+    var ms = Date.UTC(y, mo - 1, d);
+    var chk = new Date(ms);
+    if (chk.getUTCFullYear() === y && chk.getUTCMonth() === mo - 1 && chk.getUTCDate() === d) {
+      return { days: ms / 86400000, iso: m[1] + "-" + pad2(mo) + "-" + pad2(d) };
+    }
+  }
+  throw new Error(field + " is not a YYYY-MM-DD date: " + pyRepr(value));
+}
+function gv(row, key) {
+  var v = row[key];
+  return (v === undefined || v === null) ? "" : v;
+}
+function auditRow(row, seenUrls, seenTitles, seenDescriptions, options) {
+  var findings = [];
+  var code = String(gv(row, "url")).trim();
+  var label = code || "(no url)";
+  function add(rule, severity, message) {
+    findings.push({ code: label, rule: rule, severity: severity, message: message });
+  }
+  if (!code) {
+    add("missing-url", "error", "row has no URL, so the page cannot be identified");
+    return findings;
+  }
+  var urlKey = normaliseUrl(code);
+  if (seenUrls[urlKey]) add("duplicate-url", "error", "URL " + code + " is listed more than once");
+  else seenUrls[urlKey] = true;
+  if (!(code.startsWith("/") || code.startsWith("http://") || code.startsWith("https://"))) {
+    add("invalid-url", "error", "URL " + code + " does not start with / or http(s)://");
+  }
+  if (code.length > options.max_url) {
+    add("long-url", "warning", "URL is " + code.length + " characters, above the " + options.max_url + " limit, so it may be truncated in search results");
+  }
+  var title = String(gv(row, "title")).trim();
+  if (!title) {
+    add("missing-title", "error", "page has no title, so search results show the URL instead");
+  } else {
+    if (title.length > options.max_title) {
+      add("long-title", "warning", "title is " + title.length + " characters, above the " + options.max_title + " limit, so it will be cut off in search results");
+    } else if (title.length < options.min_title) {
+      add("short-title", "warning", "title is " + title.length + " characters, below the " + options.min_title + " minimum, so it says too little in search results");
+    }
+    var titleKey = title.toLowerCase();
+    if (seenTitles[titleKey]) add("duplicate-title", "error", "title " + pyRepr(title) + " is used on more than one page");
+    else seenTitles[titleKey] = true;
+  }
+  var description = String(gv(row, "meta_description")).trim();
+  if (!description) {
+    add("missing-meta-description", "error", "page has no meta description, so search results show an auto-generated snippet");
+  } else {
+    if (description.length > options.max_description) {
+      add("long-meta-description", "warning", "meta description is " + description.length + " characters, above the " + options.max_description + " limit, so it will be cut off in search results");
+    } else if (description.length < options.min_description) {
+      add("short-meta-description", "warning", "meta description is " + description.length + " characters, below the " + options.min_description + " minimum, so it says too little in search results");
+    }
+    var descKey = description.toLowerCase();
+    if (seenDescriptions[descKey]) add("duplicate-meta-description", "error", "meta description " + pyRepr(description) + " is used on more than one page");
+    else seenDescriptions[descKey] = true;
+  }
+  var h1 = String(gv(row, "h1")).trim();
+  if (!h1) {
+    add("missing-h1", "error", "page has no H1, so search engines get no main heading");
+  } else if (title && h1.toLowerCase() === title.toLowerCase()) {
+    add("h1-same-as-title", "warning", "H1 repeats the title word for word, so it adds nothing for readers or search engines");
+  }
+  var h1Count = null;
+  try { h1Count = parseIntWp(gv(row, "h1_count"), "H1 count"); }
+  catch (e) { add("invalid-h1-count", "error", e.message); }
+  if (h1Count !== null && h1Count > 1) {
+    add("multiple-h1", "error", "page has " + h1Count + " H1 headings, but a page should have exactly one");
+  }
+  var wordCount = null;
+  try { wordCount = parseIntWp(gv(row, "word_count"), "word count"); }
+  catch (e) { add("invalid-word-count", "error", e.message); }
+  if (wordCount !== null) {
+    if (wordCount < 0) add("invalid-word-count", "error", "word count " + wordCount + " is below zero");
+    else if (wordCount < options.min_words) {
+      add("thin-content", "warning", "page has " + wordCount + " words, below the " + options.min_words + " minimum, so it is thin content");
+    }
+  }
+  var status = String(gv(row, "status")).trim().toLowerCase();
+  if (!status) status = "index";
+  if (VALID_STATUSES.indexOf(status) < 0) {
+    add("invalid-status", "error", "status " + pyRepr(String(gv(row, "status")).trim()) + " is not index or noindex");
+  }
+  var canonical = String(gv(row, "canonical")).trim();
+  if (!canonical && status === "index") {
+    add("missing-canonical", "warning", "indexable page has no canonical URL, so search engines may index a duplicate version");
+  }
+  var keyword = String(gv(row, "focus_keyword")).trim();
+  if (options.has_keyword_column) {
+    if (!keyword) {
+      add("missing-focus-keyword", "warning", "page has no focus keyword set, so nobody checked what it should rank for");
+    } else if (title && title.toLowerCase().indexOf(keyword.toLowerCase()) < 0) {
+      add("keyword-not-in-title", "warning", "focus keyword " + pyRepr(keyword) + " does not appear in the title");
+    }
+  }
+  var modified = null;
+  try { modified = parseDateWp(gv(row, "last_modified"), "last modified date"); }
+  catch (e) { add("invalid-date", "error", e.message); }
+  if (modified !== null) {
+    if (modified.days > options.as_of.days) {
+      add("future-date", "error", "last modified date " + modified.iso + " is in the future");
+    } else if (options.as_of.days - modified.days > options.stale_days) {
+      add("stale-content", "warning", "page was last modified " + modified.iso + ", more than " + options.stale_days + " days ago");
+    }
+  }
+  return findings;
+}
+function optInt(v, fallback) {
+  if (v === undefined || v === null || v === "") return fallback;
+  var n = Number(v);
+  return isFinite(n) ? Math.trunc(n) : fallback;
+}
+function parseAsOf(v) {
+  if (v === undefined || v === null || v === "") {
+    var now = new Date();
+    return { days: Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000) };
+  }
+  try { return parseDateWp(v, "as-of date"); }
+  catch (e) { return null; }
+}
+function pad18(s) { while (s.length < 18) s += " "; return s; }
+window.runTool = function (inputText, options) {
+  options = options || {};
+  var asOf = parseAsOf(options.asOf);
+  if (asOf === null) return "ERROR: --as-of must be a YYYY-MM-DD date\n";
+  var opts = {
+    max_title: optInt(options.maxTitle, 60),
+    min_title: optInt(options.minTitle, 30),
+    max_description: optInt(options.maxDescription, 160),
+    min_description: optInt(options.minDescription, 50),
+    min_words: optInt(options.minWords, 150),
+    max_url: optInt(options.maxUrl, 115),
+    stale_days: optInt(options.staleDays, 365),
+    as_of: asOf,
+    has_keyword_column: false
+  };
+  var parsed = readCsv(String(inputText == null ? "" : inputText));
+  if (!parsed.rows.length) return "ERROR: no data rows in input\n";
+  if (!parsed.hasUrl) return "ERROR: no URL column found in input\n";
+  opts.has_keyword_column = parsed.hasKeyword;
+  var findings = [], seenUrls = {}, seenTitles = {}, seenDescriptions = {};
+  var byType = {}, byStatus = {};
+  parsed.rows.forEach(function (row) {
+    findings = findings.concat(auditRow(row, seenUrls, seenTitles, seenDescriptions, opts));
+    var contentType = String(gv(row, "content_type")).trim() || "(blank)";
+    byType[contentType] = (byType[contentType] || 0) + 1;
+    var st = String(gv(row, "status")).trim().toLowerCase() || "index";
+    byStatus[st] = (byStatus[st] || 0) + 1;
+  });
+  var errors = findings.filter(function (f) { return f.severity === "error"; }).length;
+  var warnings = findings.length - errors;
+  var lines = findings.map(function (f) {
+    return f.severity.toUpperCase() + " [" + f.rule + "] " + f.code + ": " + f.message;
+  });
+  var typeKeys = Object.keys(byType).sort();
+  if (typeKeys.length) {
+    lines.push("", "Pages by type:");
+    typeKeys.forEach(function (k) { lines.push("  " + pad18(k) + " " + byType[k] + " pages"); });
+  }
+  var statusKeys = Object.keys(byStatus).sort();
+  if (statusKeys.length) {
+    lines.push("", "Pages by status:");
+    statusKeys.forEach(function (k) { lines.push("  " + pad18(k) + " " + byStatus[k] + " pages"); });
+  }
+  lines.push("", "Pages: " + parsed.rows.length + ", findings: " + findings.length + ", errors: " + errors + ", warnings: " + warnings);
+  if (errors === 0 && warnings === 0) lines.push("All pages clean.");
+  return lines.join("\n") + "\n";
+};
+</script>
+<script>
+var SAMPLE = "url,title,meta_description,h1,h1_count,word_count,status,canonical,focus_keyword,content_type,last_modified\r\n/,Welcome to Example Store,Shop quality widgets and home goods at Example Store with fast shipping and friendly support.,Welcome to Example Store,1,420,index,https://example.com/,widgets,page,2026-10-01\r\n/about/,About Us,,About Our Company,1,180,index,,about us,page,2024-01-10\r\n/shop/blue-widget/,Buy the Blue Widget Online Today With Free Shipping Included and a Two Year Warranty,\"The blue widget is our best seller. Durable, lightweight, and built to last for years of daily use.\",Blue Widget,1,320,index,https://example.com/shop/blue-widget/,blue widget,product,2026-09-20\r\n/shop/red-widget/,Buy the Blue Widget Online Today With Free Shipping Included and a Two Year Warranty,\"The blue widget is our best seller. Durable, lightweight, and built to last for years of daily use.\",,1,90,index,,,product,2026-08-01\r\n/blog/how-to-choose-a-widget/,How to Choose the Right Widget for Your Home,\"Learn how to pick a widget that fits your space, your budget, and your daily routine.\",How to Choose a Widget,2,1200,index,https://example.com/blog/how-to-choose-a-widget/,choose a widget,post,2026-11-01\r\n/blog/widget-care-guide/,Widget Care Guide: Keep Your Widget Like New,\"This guide walks you through every step of widget care, from the first unboxing and setup to long term storage, cleaning routines, spare parts, and the seasonal checks that keep a widget running smoothly for years.\",Widget Care Guide,1,800,noindex,,widget care,post,2026-10-15\r\n/contact/,Contact,Get in touch with the Example Store team today.,Contact Us,1,60,index,https://example.com/contact/,contact,page,2025-06-01\r\n/shop/green-widget/,Green Widget: Eco Friendly and Built to Last,The green widget is made from recycled materials and built to last for years of daily use.,Green Widget,1,250,maybe,https://example.com/shop/green-widget/,green widget,product,2026-07-15\r\n/old-page,Old Page With a Future Date,\"This page was last modified in the future, which should never happen in a real export.\",Old Page,1,500,index,https://example.com/old-page,,page,2027-01-01\r\n/shop/blue-widget/,Blue Widget Second Listing,\"The blue widget is also listed a second time under the same URL, which confuses search engines.\",Blue Widget,1,300,index,https://example.com/shop/blue-widget/,blue widget,product,2026-09-21\r\nbad-url,,\"This page has no title and its URL does not start with a slash, so it fails two checks at once.\",Bad URL Page,1,200,index,https://example.com/bad-url,url,page,2026-10-10\r\n/blog/widget-history/,A Short History of the Widget,\"Widgets have been part of daily life for decades, and this post tells their story.\",Widget History,1,many,index,https://example.com/blog/widget-history/,widget history,post,2026-05-05\r\n/services/widget-repair/,Widget Repair Service by Example Store,\"Our repair team fixes broken widgets quickly, with genuine parts and a full warranty.\",Widget Repair,1,400,index,https://example.com/services/widget-repair/,widget installation,page,2026-11-10\r\n/very/long/url/that/keeps/going/and/going/with/many/segments/added/just/to/push/it/past/the/limit/set/for/urls/extra-segment-added-to-push-it-past-the-limit,Long URL Page With a Normal Title,This page has a normal title and description but its URL is far too long for search results.,Long URL Page,1,350,index,https://example.com/very/long/url/,long url,page,2026-10-20\r\n";
+var inputEl = document.getElementById("input");
+var outEl = document.getElementById("out");
+var lastReport = "";
+document.getElementById("file").addEventListener("change", function (ev) {
+  var f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  var reader = new FileReader();
+  reader.onload = function () { inputEl.value = String(reader.result || ""); };
+  reader.readAsText(f);
+});
+document.getElementById("sample").addEventListener("click", function () {
+  inputEl.value = SAMPLE;
+});
+document.getElementById("run").addEventListener("click", function () {
+  var options = {
+    maxTitle: document.getElementById("opt-max-title").value,
+    minTitle: document.getElementById("opt-min-title").value,
+    maxDescription: document.getElementById("opt-max-desc").value,
+    minDescription: document.getElementById("opt-min-desc").value,
+    minWords: document.getElementById("opt-min-words").value,
+    maxUrl: document.getElementById("opt-max-url").value,
+    staleDays: document.getElementById("opt-stale").value,
+    asOf: document.getElementById("opt-asof").value
+  };
+  try {
+    lastReport = window.runTool(inputEl.value, options);
+    outEl.textContent = lastReport;
+  } catch (e) {
+    lastReport = "ERROR: " + e.message + "\n";
+    outEl.textContent = lastReport;
+  }
+});
+document.getElementById("download").addEventListener("click", function () {
+  var text = lastReport || outEl.textContent;
+  var blob = new Blob([text], { type: "text/plain" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "wp-seo-report.txt";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+</script>
+</body>
+</html>

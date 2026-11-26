@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wp-seo-doctor"
+version = "1.0.0"
+description = "Audit a WordPress pages CSV export for on-page SEO problems"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
+[project.scripts]
+wp-seo-doctor = "wp_seo_doctor:main_entry"
+
+[tool.setuptools]
+py-modules = ["wp_seo_doctor"]
